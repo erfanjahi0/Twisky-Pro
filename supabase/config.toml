@@ -1,0 +1,4 @@
+project_id = "pkocozbuccigtlvymskw"
+
+[functions.facebook-api]
+verify_jwt = false
