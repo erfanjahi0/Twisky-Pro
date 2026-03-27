@@ -269,28 +269,36 @@ const PublisherPage = ({ connected, onOpenDrawer, adAccounts, pages, credentials
 
       // Step 4: Publish or Schedule
       if (scheduleEnabled && scheduledUnix) {
-        addLog("pending", `Step 4/6 — Scheduling post for ${new Date(scheduledUnix * 1000).toLocaleString()}...`);
-        // For scheduling, we use the Page Feed API directly (/{page-id}/feed).
-        // The ad-creative story_id approach does NOT support scheduled_publish_time —
-        // only a fresh POST to /feed with published=false works for scheduling.
+        // For scheduling, images must be uploaded directly to the Page photo library
+        // (not the ad account). Facebook doesn't allow specifying picture URLs on /feed
+        // unless you own the domain. We upload unpublished, then attach via media_fbid.
+        addLog("pending", "Step 4/6 — Uploading photo to page...");
+        const d3photo = await fbApi(
+          { ...base, action: "upload_photo_to_page", page_id: selectedPage, page_token: pageToken },
+          imageFile
+        );
+        if (!d3photo?.success) { addLog("error", `Step 4 FAILED: ${d3photo?.error}`); setPublishing(false); return; }
+        addLog("success", `Step 4 DONE — Photo uploaded (id: ${d3photo.media_fbid})`);
+
+        addLog("pending", `Step 5/6 — Scheduling post for ${new Date(scheduledUnix * 1000).toLocaleString()}...`);
         const d3 = await fbApi({
           ...base,
           action: "schedule_post",
           page_id: selectedPage,
           page_token: pageToken,
-          image_url: d1.image_url || null,
+          media_fbid: d3photo.media_fbid,
           caption,
           headline,
           destination_url: destUrl,
           scheduled_publish_time: scheduledUnix,
         });
-        if (!d3?.success) { addLog("error", `Step 4 FAILED: ${d3?.error}`); setPublishing(false); return; }
-        addLog("success", "Step 4 DONE — Post scheduled ✿");
+        if (!d3?.success) { addLog("error", `Step 5 FAILED: ${d3?.error}`); setPublishing(false); return; }
+        addLog("success", "Step 5 DONE — Post scheduled ✿");
 
-        addLog("pending", "Step 5/6 — Verifying scheduled post...");
+        addLog("pending", "Step 6/6 — Verifying scheduled post...");
         await new Promise((r) => setTimeout(r, 1500));
         const dv = await fbApi({ ...base, action: "verify_post", post_id: d3.post_id, page_token: pageToken });
-        addLog(dv?.success ? "success" : "info", dv?.success ? "Step 5 DONE — Verified ✓" : "Step 5 — Verification inconclusive");
+        addLog(dv?.success ? "success" : "info", dv?.success ? "Step 6 DONE — Verified ✓" : "Step 6 — Verification inconclusive");
 
         addLog("complete", `All done — post scheduled for ${new Date(scheduledUnix * 1000).toLocaleString()} 🌸`);
       } else {
